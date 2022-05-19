@@ -1,0 +1,6 @@
+Name: userapi
+Host: 0.0.0.0
+Port: 8888
+
+DB:
+  DataSource:root:Root&20200306@tcp(mysql:33306)/test?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai
