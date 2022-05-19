@@ -16,6 +16,6 @@ type ServiceContext struct {
 func NewServiceContext(c config.Config) *ServiceContext {
 	return &ServiceContext{
 		Config:    c,
-		UserModel: model.NewSysUserModel(sqlx.NewMysql(c.DB.DataSource), nil),
+		UserModel: model.NewSysUserModel(sqlx.NewMysql(c.DB.DataSource)),
 	}
 }

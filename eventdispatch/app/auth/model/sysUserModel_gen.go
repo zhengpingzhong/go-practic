@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/zeromicro/go-zero/core/stores/builder"
-	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/sqlc"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 	"github.com/zeromicro/go-zero/core/stringx"
@@ -20,8 +19,6 @@ var (
 	sysUserRows                = strings.Join(sysUserFieldNames, ",")
 	sysUserRowsExpectAutoSet   = strings.Join(stringx.Remove(sysUserFieldNames, "`user_id`", "`create_time`", "`update_time`"), ",")
 	sysUserRowsWithPlaceHolder = strings.Join(stringx.Remove(sysUserFieldNames, "`user_id`", "`create_time`", "`update_time`"), "=?,") + "=?"
-
-	cacheEventdispatchSysUserUserIdPrefix = "cache:eventdispatch:sysUser:userId:"
 )
 
 type (
@@ -33,7 +30,7 @@ type (
 	}
 
 	defaultSysUserModel struct {
-		sqlc.CachedConn
+		conn  sqlx.SqlConn
 		table string
 	}
 
@@ -52,29 +49,23 @@ type (
 	}
 )
 
-func newSysUserModel(conn sqlx.SqlConn, c cache.CacheConf) *defaultSysUserModel {
+func newSysUserModel(conn sqlx.SqlConn) *defaultSysUserModel {
 	return &defaultSysUserModel{
-		CachedConn: sqlc.NewConn(conn, c),
-		table:      "`sys_user`",
+		conn:  conn,
+		table: "`sys_user`",
 	}
 }
 
 func (m *defaultSysUserModel) Insert(ctx context.Context, data *SysUser) (sql.Result, error) {
-	eventdispatchSysUserUserIdKey := fmt.Sprintf("%s%v", cacheEventdispatchSysUserUserIdPrefix, data.UserId)
-	ret, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
-		query := fmt.Sprintf("insert into %s (%s) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", m.table, sysUserRowsExpectAutoSet)
-		return conn.ExecCtx(ctx, query, data.Username, data.Password, data.Salt, data.Email, data.Mobile, data.ExpireDate, data.Status, data.CreateUserId, data.StaffId)
-	}, eventdispatchSysUserUserIdKey)
+	query := fmt.Sprintf("insert into %s (%s) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", m.table, sysUserRowsExpectAutoSet)
+	ret, err := m.conn.ExecCtx(ctx, query, data.Username, data.Password, data.Salt, data.Email, data.Mobile, data.ExpireDate, data.Status, data.CreateUserId, data.StaffId)
 	return ret, err
 }
 
 func (m *defaultSysUserModel) FindOne(ctx context.Context, userId int64) (*SysUser, error) {
-	eventdispatchSysUserUserIdKey := fmt.Sprintf("%s%v", cacheEventdispatchSysUserUserIdPrefix, userId)
+	query := fmt.Sprintf("select %s from %s where `user_id` = ? limit 1", sysUserRows, m.table)
 	var resp SysUser
-	err := m.QueryRowCtx(ctx, &resp, eventdispatchSysUserUserIdKey, func(ctx context.Context, conn sqlx.SqlConn, v interface{}) error {
-		query := fmt.Sprintf("select %s from %s where `user_id` = ? limit 1", sysUserRows, m.table)
-		return conn.QueryRowCtx(ctx, v, query, userId)
-	})
+	err := m.conn.QueryRowCtx(ctx, &resp, query, userId)
 	switch err {
 	case nil:
 		return &resp, nil
@@ -86,30 +77,15 @@ func (m *defaultSysUserModel) FindOne(ctx context.Context, userId int64) (*SysUs
 }
 
 func (m *defaultSysUserModel) Update(ctx context.Context, data *SysUser) error {
-	eventdispatchSysUserUserIdKey := fmt.Sprintf("%s%v", cacheEventdispatchSysUserUserIdPrefix, data.UserId)
-	_, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
-		query := fmt.Sprintf("update %s set %s where `user_id` = ?", m.table, sysUserRowsWithPlaceHolder)
-		return conn.ExecCtx(ctx, query, data.Username, data.Password, data.Salt, data.Email, data.Mobile, data.ExpireDate, data.Status, data.CreateUserId, data.StaffId, data.UserId)
-	}, eventdispatchSysUserUserIdKey)
+	query := fmt.Sprintf("update %s set %s where `user_id` = ?", m.table, sysUserRowsWithPlaceHolder)
+	_, err := m.conn.ExecCtx(ctx, query, data.Username, data.Password, data.Salt, data.Email, data.Mobile, data.ExpireDate, data.Status, data.CreateUserId, data.StaffId, data.UserId)
 	return err
 }
 
 func (m *defaultSysUserModel) Delete(ctx context.Context, userId int64) error {
-	eventdispatchSysUserUserIdKey := fmt.Sprintf("%s%v", cacheEventdispatchSysUserUserIdPrefix, userId)
-	_, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
-		query := fmt.Sprintf("delete from %s where `user_id` = ?", m.table)
-		return conn.ExecCtx(ctx, query, userId)
-	}, eventdispatchSysUserUserIdKey)
+	query := fmt.Sprintf("delete from %s where `user_id` = ?", m.table)
+	_, err := m.conn.ExecCtx(ctx, query, userId)
 	return err
-}
-
-func (m *defaultSysUserModel) formatPrimary(primary interface{}) string {
-	return fmt.Sprintf("%s%v", cacheEventdispatchSysUserUserIdPrefix, primary)
-}
-
-func (m *defaultSysUserModel) queryPrimary(ctx context.Context, conn sqlx.SqlConn, v, primary interface{}) error {
-	query := fmt.Sprintf("select %s from %s where `user_id` = ? limit 1", sysUserRows, m.table)
-	return conn.QueryRowCtx(ctx, v, query, primary)
 }
 
 func (m *defaultSysUserModel) tableName() string {
